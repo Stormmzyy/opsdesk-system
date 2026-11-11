@@ -2,20 +2,27 @@
 
 A running order to rehearse with a timer. It covers what the guide asks for: `docker compose up --build` on a clean folder, all four roles and what each can and can't do, the Swagger page with Authorize working, and a green CI run.
 
-**The one thing to remember:** the 403 that comes back when a manager calls `DELETE` with curl, while the Delete button is hidden in the UI. It lands between 7:00 and 9:00, with six minutes to spare.
+**The one thing to remember:** the 403 that comes back when a manager calls `DELETE` with curl, while the Delete button is hidden in the UI. It lands between 7:30 and 9:30, with five and a half minutes to spare.
 
 **Designed around the waiting.** The cold build is about two and a quarter minutes of nothing happening (measured: 2 min 14 s, with a 5 s clone before it). So it starts first, and the talk that has to happen anyway runs over it. Signing in as four people is the other slow part, so nobody signs in during the demo: each person has their own browser profile, signed in beforehand.
 
-## Two stacks, and why
+## Two profiles: the seam is part of the demo
+
+The same code runs twice, under two profiles, and the switch from one to the other is shown, not apologised for.
 
 | | Clean stack | Development stack |
 | --- | --- | --- |
 | What | the three fresh clones, `docker compose up --build` | your existing checkouts: the dev backend and Vite |
 | Addresses | frontend `localhost:3000`, API `localhost:8080` | frontend `localhost:5173`, API `localhost:8081` |
-| Profile | `prod`: no sample data, no Swagger | `dev`: the six seeded people and twelve tickets, and Swagger |
+| Profile | `prod`: no seeded users, no Swagger | `dev`: the six seeded people, twelve tickets, and Swagger |
 | Used for | sections 1 to 3, and 8 | sections 4 to 6 |
 
-The clean stack can't do the role tour or Swagger, by design. The `prod` profile seeds nobody (decision 69), and Swagger only exists under `dev` (decision 74). Say so out loud in section 3: it is a feature, not a gap.
+**What the clean stack doesn't have is the point.**
+- **No seeded users** is decision 69 doing its job. The six sample accounts share one password that is published in the README. On a real server, those would be six open doors.
+- **That's also why the first admin is made with SQL.** No request to the API can make anyone an admin, not even the first one. So the first admin has to come from someone who already holds the database credentials, not from whoever registers first.
+- **No Swagger** is decision 74. A live `/v3/api-docs` would hand a stranger the map of every endpoint.
+
+So the end of section 3 proves it with two curls: the seeded admin can't sign in to the clean stack, and its Swagger isn't there. The same two requests against the development stack then succeed. The difference between the profiles becomes something the audience sees, and it leads straight into the role tour.
 
 The dev backend runs on **8081**, not its usual 8080, because the clean stack's backend takes 8080. Vite is pointed at it when started.
 
@@ -60,7 +67,7 @@ SERVER_PORT=8081 SPRING_PROFILES_ACTIVE=dev ./mvnw spring-boot:run
 
 Wait for `Tomcat started on port 8081`.
 
-**Terminal D: Vite, pointed at 8081.** Run this in your opsdesk-frontend checkout.
+**Terminal D: Vite, pointed at 8081.** Run this in your opsdesk-frontend checkout, on an up-to-date `main`. Section 4 shows the Users page's permission message, which arrived in opsdesk-frontend#55.
 
 ```bash
 VITE_API_URL=http://localhost:8081/api/v1 npx vite --port 5173 --strictPort
@@ -108,14 +115,14 @@ Each should print about 175 characters before the `clear`. A `0` means that logi
 | --- | --- | --- | --- |
 | 1 | Start from nothing | 0:00 | 0:45 |
 | 2 | Talk over the build | 0:45 | 2:15 |
-| 3 | It's up: one sign-up on the clean stack | 3:00 | 1:00 |
-| 4 | The four roles | 4:00 | 3:00 |
-| 5 | **The 403** | 7:00 | 2:00 |
-| 6 | Swagger, with Authorize | 9:00 | 2:00 |
-| 7 | A green CI run | 11:00 | 1:30 |
-| 8 | Data survives a restart, then questions | 12:30 | 2:30 |
+| 3 | It's up: one sign-up, and what production leaves out | 3:00 | 1:30 |
+| 4 | The four roles | 4:30 | 3:00 |
+| 5 | **The 403** | 7:30 | 2:00 |
+| 6 | Swagger, with Authorize | 9:30 | 2:00 |
+| 7 | A green CI run | 11:30 | 1:30 |
+| 8 | Data survives a restart, then questions | 13:00 | 2:00 |
 
-**If the build is slow** and not done by 3:00, go straight on to section 4: the development stack doesn't depend on it. Come back to section 3 when Terminal A gives its prompt back. The 403 still lands by about 9:30.
+**If the build is slow** and not done by 3:00, go straight on to section 4: the development stack doesn't depend on it. Say "the clean build is still running, so I'll start with the roles on the development profile and come back to it". Come back to section 3 when Terminal A gives its prompt back. The 403 still lands by about 10:00.
 
 ### 1. Start from nothing (0:00, 45 s), in Terminal A
 
@@ -142,7 +149,7 @@ The guide says to be ready to explain these four things, so this is where they g
 
 Leave CI for section 7.
 
-### 3. It's up (3:00, 1 min)
+### 3. It's up, and what production leaves out (3:00, 1 min 30 s)
 
 When Terminal A gives its prompt back:
 
@@ -159,11 +166,36 @@ In the fifth window, open a new tab at `http://localhost:3000`:
 3. Click **Create account**. The login page says "Your account was created. Sign in to continue."
 4. Sign in. You land on the Dashboard, and the header shows your name and **User**.
 
-Say: "This stack seeded nobody, on purpose. The first admin is one SQL line in the README. For the four roles I'll switch to the development stack, which seeds six people designed to hit every cell of the permission table."
-
 Keep this tab: section 8 uses it.
 
-### 4. The four roles (4:00, 3 min, about 45 s each)
+**Now show what production leaves out.** In Terminal B, try the seeded admin and Swagger against the clean stack, then the same two against the development stack:
+
+```bash
+curl -s -w '\nHTTP %{http_code}\n' -X POST http://localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' -d '{"email":"priya.sharma@opsdesk.com","password":"devpassword123"}'
+curl -s -o /dev/null -w 'HTTP %{http_code}\n' http://localhost:8080/v3/api-docs
+```
+
+```
+{"error":"UNAUTHORIZED","message":"The email or password is incorrect."}
+HTTP 401
+HTTP 401
+```
+
+```bash
+curl -s -o /dev/null -w 'HTTP %{http_code}\n' -X POST "$API/auth/login" -H 'Content-Type: application/json' -d '{"email":"priya.sharma@opsdesk.com","password":"devpassword123"}'
+curl -s -o /dev/null -w 'HTTP %{http_code}\n' http://localhost:8081/v3/api-docs
+```
+
+```
+HTTP 200
+HTTP 200
+```
+
+**Say, as you switch:**
+
+> "Same code, two profiles. The build you just watched is production: it has one user, the one I just registered, and no Swagger. That's deliberate. A real server must never ship sample accounts with a published password, or a map of its own API. It's also why the first admin is made with SQL: no request to the API can make anyone an admin. To show the four roles, I'll switch to the development profile, the only place the seeded people exist, designed to hit every cell of the permission table."
+
+### 4. The four roles (4:30, 3 min, about 45 s each)
 
 Go from least power to most.
 
@@ -177,6 +209,7 @@ Go from least power to most.
 - Add a word to the **Title**, then click **Save changes**.
 - A red notice appears: "Ticket #3 wasn't saved: you don't have permission to make this change…" The page shows the server's 403 properly, and nothing was written.
 - Say: "The Edit button isn't hidden here, because whether he may edit depends on who the ticket is assigned to. The server decides."
+- Click **Users** in the menu. It says "You don't have permission to see the user list.", with no Retry button, because asking again would get the same answer. The page stays reachable on purpose: hiding it would be the same convenience as hiding a button, and the page would still have to handle the server's refusal.
 
 **Kwame, MANAGER** (his window, on #2):
 - **#2**: **Edit**, and an **Assignment** box with **Assign to**. There is **no Delete button**.
@@ -186,7 +219,7 @@ Go from least power to most.
 - The same ticket, with **Edit**, **Assign** and **Delete ticket**. The only difference from Kwame's view is Delete.
 - **Don't click Delete ticket.** The seeder only refills empty tables, so a deleted seeded ticket never comes back.
 
-### 5. The 403 (7:00, 2 min)
+### 5. The 403 (7:30, 2 min)
 
 **This is the moment.** Put Kwame's window and Terminal B side by side.
 
@@ -242,7 +275,7 @@ Both answer `404` with the same body ("No ticket with id …"). Fatima can't tel
   curl -s -w '\nHTTP %{http_code}\n' -X DELETE "$API/tickets/2"
   ```
 
-### 6. Swagger, with Authorize (9:00, 2 min)
+### 6. Swagger, with Authorize (9:30, 2 min)
 
 In the fifth window, tab 1 (`http://localhost:8081/swagger-ui.html`):
 
@@ -258,7 +291,7 @@ In the fifth window, tab 1 (`http://localhost:8081/swagger-ui.html`):
 
 Say: "This page exists only under the development profile. In production, the Swagger paths answer exactly like a path that doesn't exist, so nobody can tell they're there."
 
-### 7. A green CI run (11:00, 1 min 30 s)
+### 7. A green CI run (11:30, 1 min 30 s)
 
 Tab 2, the backend run:
 - Two jobs, **verify** and **image**, both green.
@@ -270,7 +303,7 @@ Tab 3, the frontend run:
 
 Say: "Branch protection on `main` requires these checks to pass, so nothing reaches `main` red, my own pushes included."
 
-### 8. Data survives a restart, then questions (12:30, 2 min 30 s)
+### 8. Data survives a restart, then questions (13:00, 2 min)
 
 In Terminal A:
 
@@ -287,7 +320,6 @@ Then questions.
 
 ## Don't, during the demo
 
-- **Don't open the Users page as Daniel or Fatima.** The API correctly answers 403, but the page shows "Sorry, we couldn't load users. Check your connection." That's a known frontend bug: a 403 described as a connection problem. If someone asks, say exactly that.
 - **Don't click Delete ticket in Priya's window**, and don't run `DELETE` with `$PRIYA`. Either would really delete a seeded ticket.
 - **Don't use `docker compose down -v` in section 8.** It deletes the account you're about to sign in with.
 
