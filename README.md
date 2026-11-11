@@ -22,6 +22,7 @@ It's three repositories:
 - [Environment variables](#environment-variables)
 - [Run the tests](#run-the-tests)
 - [API documentation](#api-documentation)
+- [Versions](#versions)
 - [If something goes wrong](#if-something-goes-wrong)
 
 ## Features
@@ -247,6 +248,28 @@ npm test
 
 - **[API_CONTRACT.md](https://github.com/Stormmzyy/opsdesk-frontend/blob/main/API_CONTRACT.md)**: every endpoint, what it accepts and returns, the errors, and who may do what. This is the description to read first.
 - **Swagger**, the interactive page generated from the running code, at `/swagger-ui.html`. **It isn't on the stack above, on purpose:** the backend serves it only under its development profile, because a public `/v3/api-docs` would hand anyone the map of every endpoint. To see it, stop this stack (`docker compose down`, so port 8080 is free) and start the backend on its own under the development profile. That needs Java 21 (see [Run the tests](#run-the-tests) about `JAVA_HOME`) and the development database, both in the backend README: its [Database](https://github.com/Stormmzyy/opsdesk-backend#database) section, then [Running the app](https://github.com/Stormmzyy/opsdesk-backend#running-the-app). Then open **http://localhost:8080/swagger-ui.html**. That backend has six sample users, all with the development password `devpassword123` (sample data, never a real password).
+
+## Versions
+
+| Product release | Backend | Frontend | System |
+| --- | --- | --- | --- |
+| **OpsDesk v1.0** | `v1.0.0` | `v2.0.0` | `v1.0.0` |
+
+All three tags carry the message "OpsDesk v1.0".
+
+**The repositories version independently, so the tag names don't match.** The frontend is a major version ahead because its `v1.0.0` already exists. It was published on 14 October as a frontend-only release that ran on a mock API. Today's frontend is a breaking change from that release, not a minor one:
+- a build fails without `VITE_API_URL`;
+- the app doesn't work without a backend to sign in to.
+
+**So the frontend's `v1.0.0` is not this release.** Use `v2.0.0`. Backend NOTES.md, decision 75, says why the old tag wasn't moved instead.
+
+To run exactly this release rather than the latest `main`, check out the tags after step 1's clones:
+
+```bash
+git -C opsdesk-backend checkout v1.0.0
+git -C opsdesk-frontend checkout v2.0.0
+git -C opsdesk-system checkout v1.0.0
+```
 
 ## If something goes wrong
 
