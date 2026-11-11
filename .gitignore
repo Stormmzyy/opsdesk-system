@@ -1,0 +1,5 @@
+# Real settings for docker compose: the database password and the JWT
+# signing key. Never committed; .env.example is the template, with fakes.
+.env
+.env.*
+!.env.example
