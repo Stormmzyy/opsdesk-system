@@ -43,21 +43,33 @@ In Chrome: profile icon (top right), **Add**, **Continue without an account**, t
 
 ### 30 minutes before (no earlier: tokens last 60 minutes)
 
-**Terminal A: reset the clean stack.** This one runs Git Bash in your home folder.
+**Every terminal is Git Bash, not PowerShell.** The commands below use `export`, `VAR=value command` and `${!v}`, which PowerShell doesn't have.
+
+**What must already exist on the machine.** Prep doesn't create any of these:
+- the `opsdesk-db` container, made once with the backend README's `docker run` command, still holding the seeded data;
+- the backend and frontend checkouts, each on an up-to-date `main`;
+- the frontend's `node_modules`. If `package-lock.json` has changed since your last `npm ci`, run `npm ci` first. Otherwise `npx vite` fails, or tries to download Vite;
+- a JDK 21 at the path in Terminal C;
+- the four browser profiles above.
+
+**Terminal A: reset the clean stack.** Run this in your home folder.
 
 ```bash
 docker compose -p opsdesk down -v
 docker image rm opsdesk-backend opsdesk-frontend
 docker buildx rm opsdesk-demo
 docker buildx create --name opsdesk-demo --driver docker-container
+docker buildx inspect --bootstrap opsdesk-demo
 rm -rf ~/opsdesk-demo
 ```
 
 - **`-v` matters.** Every copy of the compose file names its project `opsdesk`, so without it the "clean" folder would reuse the old data volume, and its old accounts.
 - **The new builder makes the build cold** without wiping the Docker cache other projects use. It's only there to imitate a machine that has never built OpsDesk. On a real clean machine there's no cache anyway.
-- `docker image rm` and `docker buildx rm` complain if there's nothing to remove. That's fine.
+- **`--bootstrap` starts the builder now**, about 7 seconds, instead of in the first seconds of section 1. On a machine without the `moby/buildkit` image, this is also where it gets downloaded.
+- `docker image rm` and `docker buildx rm` complain if there's nothing to remove ("No such image", "no builder found"). That's fine: the next lines still run.
+- **The cold build needs the network.** The new builder doesn't use the images already on this machine, so section 1 downloads the Java, Node and nginx base images from Docker Hub, plus every Maven and npm dependency. The measured 2 min 14 s included all of that, on this connection. Section 1 says what to do if the venue's network is slow.
 
-**Terminal C: the dev backend.** Run this in your opsdesk-backend checkout. The `JAVA_HOME` line is the backend README's, under "Requirements": `mvnw` needs a JDK 21.
+**Terminal C: the dev backend.** Run this in your opsdesk-backend checkout, on an up-to-date `main`. The `JAVA_HOME` line is the backend README's, under "Requirements": `mvnw` needs a JDK 21. `docker start` fails with "No such container" if `opsdesk-db` was never created. In that case, run the backend README's `docker run` command first, and the seeder fills it when the backend starts.
 
 ```bash
 docker start opsdesk-db
@@ -94,19 +106,24 @@ tok() { curl -s -X POST "$API/auth/login" -H 'Content-Type: application/json' -d
 PRIYA=$(tok priya.sharma@opsdesk.com); KWAME=$(tok kwame.asante@opsdesk.com)
 DANIEL=$(tok daniel.mensah@opsdesk.com); FATIMA=$(tok fatima.bello@opsdesk.com)
 for v in PRIYA KWAME DANIEL FATIMA; do t=${!v}; echo "$v: ${#t} characters"; done
-clear
 ```
 
-Each should print about 175 characters before the `clear`. A `0` means that login failed. Check Terminal C.
+Each line should say about 175 characters (measured: 176, 179, 177, 175). A `0` means that login failed: check Terminal C. **Read the four lines, then type `clear` yourself.** Don't put it in the block: it would wipe the check before you could see it.
+
+**Keep Terminal B open until the demo ends.** The four variables, and `API`, exist only in that shell. Sections 3 and 5 use them there.
 
 **A fifth window**, in your normal profile, with three tabs in this order:
 1. `http://localhost:8081/swagger-ui.html` (don't press Authorize yet)
 2. https://github.com/Stormmzyy/opsdesk-backend/actions/runs/43044400675
-3. https://github.com/Stormmzyy/opsdesk-frontend/actions/runs/43044412441
+3. https://github.com/Stormmzyy/opsdesk-frontend/actions/runs/43060946194
 
-**Last checks:**
+Those are the newest runs on each `main` (backend: #11's merge; frontend: #55's merge). If anything merges before the demo, open the newest run on `main` instead, so nobody asks whether the one shown is current.
+
+**Last checks**, in Terminal B:
 - `docker ps` shows no `opsdesk-*` container except `opsdesk-db`.
 - `curl -s localhost:8081/actuator/health` says `{"status":"UP"}`.
+- Nothing is on 3000 or 8080 yet, for the clean stack: `curl -s -o /dev/null -w '%{http_code}\n' localhost:8080` prints `000`.
+- The seeded data is intact, with all 12 tickets: `curl -s -H "Authorization: Bearer $PRIYA" "$API/tickets" | grep -o '"id":[0-9]*,"title"' | wc -l` prints `12`. Anything less means a seeded ticket was deleted in a rehearsal. The seeder won't put it back, so the role tour's tickets may be missing.
 - Terminal font is large, and notifications are off.
 
 ## The running order
@@ -137,6 +154,14 @@ BUILDX_BUILDER=opsdesk-demo docker compose up --build --wait
 ```
 
 The `printf` line does the README's "copy `.env.example` to `.env` and fill in both values" in one step, with two random values. Say that, so nobody thinks a step was skipped.
+
+**If the network is slow,** with the build still downloading at 3:30, or a pull failing: press Ctrl+C, then run
+
+```bash
+docker compose up --build --wait
+```
+
+This is the same command without `BUILDX_BUILDER`, so it uses this machine's warm cache. Say so plainly: "the venue's network is slow, so I'm using the cache; the cold build took two and a quarter minutes in rehearsal." Section 3 onwards is unchanged.
 
 ### 2. Talk over the build (0:45, 2 min 15 s)
 
@@ -299,7 +324,7 @@ Tab 2, the backend run:
 - Say: "Building an image proves nothing about whether it runs. This starts it, and passes only if it refuses to run unconfigured."
 
 Tab 3, the frontend run:
-- **check** (lint, 97 tests and the build) and **image** (the nginx config tested inside the image), both green.
+- **check** (lint, 101 tests and the build) and **image** (the nginx config tested inside the image), both green.
 
 Say: "Branch protection on `main` requires these checks to pass, so nothing reaches `main` red, my own pushes included."
 
