@@ -43,14 +43,12 @@ flowchart LR
     subgraph compose["docker compose (project: opsdesk)"]
         frontend["frontend<br/>nginx<br/>localhost:3000"]
         backend["backend<br/>Spring Boot API<br/>localhost:8080"]
-        db[("db<br/>PostgreSQL 16<br/>no port on your machine")]
-        volume[("volume db-data<br/>the data")]
+        db[("db<br/>PostgreSQL 16<br/>no port on your machine<br/>data in volume db-data")]
     end
 
     browser -- "1: loads the app<br/>GET / and /assets/…" --> frontend
     browser -- "2: every API call, directly<br/>GET/POST/PATCH/DELETE /api/v1/…<br/>with Authorization: Bearer token" --> backend
     backend -- "SQL, as db:5432<br/>inside the compose network" --> db
-    db --- volume
 ```
 
 - **nginx only serves the app's files.** It never sees an API call: once the page has loaded, the browser sends every API request **straight to `localhost:8080`**. That address is written into the app when its image is built (`VITE_API_URL`).
@@ -106,7 +104,11 @@ openssl rand -hex 24          # for DB_PASSWORD
 openssl rand -base64 48       # for JWT_SECRET
 ```
 
-PowerShell (each line prints one value): `-join ((1..48) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })`
+PowerShell has no `openssl`. Run this once for each value; it prints 96 random characters:
+
+```powershell
+-join ((1..48) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
+```
 
 **You should now have** a `.env` with two lines like `DB_PASSWORD=3f9c…` and `JWT_SECRET=kQ7v…`. Git ignores this file; never commit it.
 
@@ -116,14 +118,14 @@ PowerShell (each line prints one value): `-join ((1..48) | ForEach-Object { '{0:
 docker compose up --build --wait
 ```
 
-**The first run takes several minutes.** It downloads the base images and every Java and JavaScript dependency, and builds both images. Later runs take seconds.
+**The first run takes a few minutes**: about 2 on a fast connection (measured on a cleared machine: 1 minute 51 seconds), longer on a slow one. It downloads the base images and every Java and JavaScript dependency, about 2 GB once unpacked, and builds both images, printing a lot of build output as it goes. Later runs take seconds.
 
-**You should see**, at the end:
+**You should see**, at the end, a line for each of the three containers ending in **Healthy** (in any order):
 
 ```
- ✔ Container opsdesk-db-1        Healthy
- ✔ Container opsdesk-frontend-1  Healthy
- ✔ Container opsdesk-backend-1   Healthy
+ Container opsdesk-db-1  Healthy
+ Container opsdesk-frontend-1  Healthy
+ Container opsdesk-backend-1  Healthy
 ```
 
 and get your prompt back. `--wait` returns only once the backend answers its health check, so when the prompt comes back, it's ready.
@@ -212,7 +214,7 @@ Running either application outside Docker uses more variables; each repository's
 
 Each repository's tests run on their own, with no database and no running backend. They also run on GitHub for every push to `main` and every pull request.
 
-**Backend** (needs **Java 21**; `java -version` should say 21 or later):
+**Backend** (needs **Java 21** or later):
 
 ```bash
 cd ../opsdesk-backend
@@ -222,6 +224,14 @@ cd ../opsdesk-backend
 PowerShell: `.\mvnw.cmd test`
 
 **You should see** `Tests run: …, Failures: 0, Errors: 0` and `BUILD SUCCESS`. The first run downloads Maven and the dependencies, so it takes a few minutes.
+
+**If instead it stops at once with `OpsDesk needs JDK 21 or later, but this build is running on JDK 17…`**, the Maven wrapper found an older Java. It uses `JAVA_HOME` when that's set, before the `java` on your PATH, so `java -version` saying 21 isn't enough on its own. Point `JAVA_HOME` at a JDK 21 for this terminal, then run `./mvnw test` again (the folder name depends on your JDK; it's often under `C:\Program Files\Eclipse Adoptium` or `C:\Program Files\Java`):
+
+```bash
+export JAVA_HOME="/c/Program Files/Eclipse Adoptium/jdk-21.0.4.7-hotspot"
+```
+
+PowerShell: `$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21.0.4.7-hotspot"`
 
 **Frontend** (needs **Node 22**; `node -v` should say v22):
 
@@ -236,16 +246,17 @@ npm test
 ## API documentation
 
 - **[API_CONTRACT.md](https://github.com/Stormmzyy/opsdesk-frontend/blob/main/API_CONTRACT.md)**: every endpoint, what it accepts and returns, the errors, and who may do what. This is the description to read first.
-- **Swagger**, the interactive page generated from the running code, at `/swagger-ui.html`. **It isn't on the stack above, on purpose:** the backend serves it only under its development profile, because a public `/v3/api-docs` would hand anyone the map of every endpoint. To see it, stop this stack (`docker compose down`, so port 8080 is free) and start the backend on its own under the development profile, following the [backend README](https://github.com/Stormmzyy/opsdesk-backend#running-the-app); then open **http://localhost:8080/swagger-ui.html**. That backend has six sample users, all with the development password `devpassword123` (sample data, never a real password).
+- **Swagger**, the interactive page generated from the running code, at `/swagger-ui.html`. **It isn't on the stack above, on purpose:** the backend serves it only under its development profile, because a public `/v3/api-docs` would hand anyone the map of every endpoint. To see it, stop this stack (`docker compose down`, so port 8080 is free) and start the backend on its own under the development profile. That needs Java 21 (see [Run the tests](#run-the-tests) about `JAVA_HOME`) and the development database, both in the backend README: its [Database](https://github.com/Stormmzyy/opsdesk-backend#database) section, then [Running the app](https://github.com/Stormmzyy/opsdesk-backend#running-the-app). Then open **http://localhost:8080/swagger-ui.html**. That backend has six sample users, all with the development password `devpassword123` (sample data, never a real password).
 
 ## If something goes wrong
 
 | What you see | Why, and what to do |
 | --- | --- |
 | `required variable DB_PASSWORD is missing a value` (or `JWT_SECRET`), and nothing starts | There's no `.env` in `opsdesk-system`, or a value is empty. Go back to [step 2](#2-create-your-env-and-put-real-values-in-it). |
-| `docker compose up --build --wait` fails because the backend container exited, and `docker compose logs backend` ends with `JWT_SECRET is too short` | `.env` was copied but not edited. Put real values in it (step 2), then `docker compose up --wait`. |
-| An error naming `../opsdesk-backend` or `../opsdesk-frontend` | The three repositories aren't side by side, or a folder has a different name. They must be called exactly `opsdesk-backend`, `opsdesk-frontend` and `opsdesk-system`, in the same folder ([step 1](#1-clone-the-three-repositories-side-by-side)). |
-| `port is already allocated` | Something else on your machine is using port 3000 or 8080. Stop it, then run the command again. |
+| `docker compose up --build --wait` ends with `container opsdesk-backend-1 exited (1)`, and `docker compose logs backend` shows `JWT_SECRET is too short` | `.env` was copied but not edited. Put real values in it (step 2), then `docker compose up --wait`. |
+| `unable to prepare context: path "…\opsdesk-frontend" not found` (or `…opsdesk-backend`), and nothing is built | The three repositories aren't side by side, or a folder has a different name. They must be called exactly `opsdesk-backend`, `opsdesk-frontend` and `opsdesk-system`, in the same folder ([step 1](#1-clone-the-three-repositories-side-by-side)). |
+| An error about port 3000 or 8080, such as `port is already allocated` or `ports are not available` | Something else on your machine is using that port (another app's dev server, say). Stop it, then run the command again. |
+| `./mvnw test` stops with `OpsDesk needs JDK 21 or later` | Java is too old, or `JAVA_HOME` points at an older one. See [Run the tests](#run-the-tests). |
 | The backend container exits, and `docker compose logs backend` says `password authentication failed` | `DB_PASSWORD` was changed after the first run. See `DB_PASSWORD` in [Environment variables](#environment-variables). |
 | You changed `VITE_API_URL` and nothing changed | It's built into the app. Run `docker compose up --build --wait`, not a restart. |
 | Your role changed, but the page still shows the old one | Reload the page. |
